@@ -1,0 +1,49 @@
+services:
+  controller:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: controller
+    environment:
+      HUBGAME_ADDR: ":8082"
+      HUBGAME_JWT_SECRET: "dev-secret-change-me"
+      HUBGAME_JWT_ISSUER: "hubgame-controller"
+      HUBGAME_CONTROLLER_ADMIN_TOKEN: "dev-controller-admin"
+    ports:
+      - "8082:8082"
+
+  db-engine:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: db-engine
+    environment:
+      HUBGAME_ADDR: ":8081"
+      HUBGAME_SQLITE_DSN: "file:/data/hubgame.db?_pragma=busy_timeout(5000)"
+      HUBGAME_INTERNAL_TOKEN: "dev-internal-token"
+    volumes:
+      - db_data:/data
+    ports:
+      - "8081:8081"
+
+  gateway:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: gateway
+    environment:
+      HUBGAME_ADDR: ":8080"
+      HUBGAME_CONTROLLER_URL: "http://controller:8082"
+      HUBGAME_DB_ENGINE_URL: "http://db-engine:8081"
+      HUBGAME_INTERNAL_TOKEN: "dev-internal-token"
+    depends_on:
+      - controller
+      - db-engine
+    ports:
+      - "8080:8080"
+
+volumes:
+  db_data:
