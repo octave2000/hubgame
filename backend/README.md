@@ -31,6 +31,22 @@ docker compose up --build
 
 Public entrypoint: `http://localhost:8080`
 
+## Seed Catalog (Versioned)
+Local Go command:
+```bash
+go run ./backend/cmd/seed-catalog
+```
+
+Re-apply same version explicitly:
+```bash
+go run ./backend/cmd/seed-catalog -- -force
+```
+
+Containerized one-off seed:
+```bash
+docker compose run --rm --profile tools seed-catalog
+```
+
 ## Dev Token Endpoint (Gateway)
 When `HUBGAME_ENABLE_DEV_AUTH=true`, gateway exposes:
 - `POST /v1/auth/dev-token`

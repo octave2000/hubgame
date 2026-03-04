@@ -12,7 +12,11 @@ Frontend store UI for HubGame with live backend integration.
 ```bash
 docker compose up --build
 ```
-2. Start web app:
+2. Seed starter catalog (one-off):
+```bash
+docker compose run --rm --profile tools seed-catalog
+```
+3. Start web app:
 ```bash
 cd web
 bun install

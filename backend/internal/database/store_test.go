@@ -85,3 +85,32 @@ func TestUpdateEntityWithVersionConflict(t *testing.T) {
 		t.Fatalf("expected ErrVersionConflict, got %v", err)
 	}
 }
+
+func TestSeedHistoryTracking(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenSQLite(ctx, "file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer store.Close()
+
+	applied, err := store.IsSeedApplied(ctx, "catalog", "v1")
+	if err != nil {
+		t.Fatalf("is seed applied: %v", err)
+	}
+	if applied {
+		t.Fatalf("expected seed to be unapplied")
+	}
+
+	if err := store.MarkSeedApplied(ctx, "catalog", "v1"); err != nil {
+		t.Fatalf("mark seed applied: %v", err)
+	}
+
+	applied, err = store.IsSeedApplied(ctx, "catalog", "v1")
+	if err != nil {
+		t.Fatalf("is seed applied after mark: %v", err)
+	}
+	if !applied {
+		t.Fatalf("expected seed to be applied")
+	}
+}

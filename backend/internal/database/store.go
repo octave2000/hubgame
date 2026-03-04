@@ -72,6 +72,13 @@ CREATE TABLE IF NOT EXISTS events (
 	created_at TIMESTAMP NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_tenant_topic_id ON events(tenant_id, topic, id);
+
+CREATE TABLE IF NOT EXISTS seed_history (
+	seed_name TEXT NOT NULL,
+	version TEXT NOT NULL,
+	applied_at TIMESTAMP NOT NULL,
+	PRIMARY KEY (seed_name, version)
+);
 `
 	_, err := s.db.ExecContext(ctx, schema)
 	return err
@@ -300,4 +307,25 @@ func mustJSON(v any) json.RawMessage {
 		return json.RawMessage(`{"error":"marshal"}`)
 	}
 	return b
+}
+
+func (s *Store) IsSeedApplied(ctx context.Context, seedName, version string) (bool, error) {
+	var exists int
+	err := s.db.QueryRowContext(ctx, `
+SELECT EXISTS(
+	SELECT 1 FROM seed_history WHERE seed_name = ? AND version = ?
+)
+`, seedName, version).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists == 1, nil
+}
+
+func (s *Store) MarkSeedApplied(ctx context.Context, seedName, version string) error {
+	_, err := s.db.ExecContext(ctx, `
+INSERT OR REPLACE INTO seed_history(seed_name, version, applied_at)
+VALUES (?, ?, ?)
+`, seedName, version, time.Now().UTC())
+	return err
 }

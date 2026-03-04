@@ -47,5 +47,19 @@ services:
     ports:
       - "8080:8080"
 
+  seed-catalog:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: seed-catalog
+    environment:
+      HUBGAME_SQLITE_DSN: "file:/data/hubgame.db?_pragma=busy_timeout(5000)"
+    volumes:
+      - db_data:/data
+    depends_on:
+      - db-engine
+
 volumes:
   db_data:

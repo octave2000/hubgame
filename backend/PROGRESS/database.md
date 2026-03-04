@@ -7,3 +7,4 @@
 - Added append-only event storage and topic-based pub/sub broker.
 - Added schema-validation controller hook for entity and event payloads.
 - Auto-emitted entity lifecycle events: inserted, updated, deleted.
+- Added `seed_history` tracking table with `IsSeedApplied` / `MarkSeedApplied` helpers for versioned seed runs.
