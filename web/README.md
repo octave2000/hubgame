@@ -16,7 +16,12 @@ docker compose up --build
 ```bash
 docker compose run --rm --profile tools seed-catalog
 ```
-3. Start web app:
+3. Generate static fallback catalog from `/games` (for offline/backend-down mode):
+```bash
+bun scripts/publish-games.mjs
+bun scripts/sync-games-to-web.mjs
+```
+4. Start web app:
 ```bash
 cd web
 bun install
@@ -38,6 +43,7 @@ VITE_DEV_ROLE=developer
 - UI requests a dev token from gateway endpoint `POST /v1/auth/dev-token`.
 - Catalog is loaded from backend entities with `kind=game`.
 - Realtime updates use websocket stream on `topic=entity.game`.
+- If gateway is unavailable, UI falls back to `web/public/fallback-catalog.json`.
 
 ## Build
 ```bash

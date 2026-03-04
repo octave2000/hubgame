@@ -13,3 +13,4 @@
 - Added first web store UI (React + Tailwind) with advanced lookup, cozy modern design, and game-image-first browsing.
 - Integrated web store with live backend catalog via gateway API and realtime websocket updates.
 - Added versioned backend catalog seeding command with seed-history tracking and compose one-off runner.
+- Added `/games` static fallback integration: publish + sync scripts feeding `web/public/fallback-catalog.json` when gateway is unavailable.

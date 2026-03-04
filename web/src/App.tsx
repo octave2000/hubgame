@@ -19,6 +19,10 @@ type EntityRecord = {
   data: Partial<Game>
 }
 
+type FallbackCatalog = {
+  games?: Array<Partial<Game> & { id?: string }>
+}
+
 const seedCatalog: Game[] = [
   {
     id: 'mod-grid',
@@ -131,6 +135,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
+  const [catalogSource, setCatalogSource] = useState<'gateway' | 'fallback'>('gateway')
 
   const loadCatalog = useCallback(async (authToken: string) => {
     const response = await fetch(`${gatewayURL}/v1/entities?kind=game`, {
@@ -144,6 +149,28 @@ function App() {
       .map((entity) => toGame(entity.id, entity.data))
       .filter((game): game is Game => game !== null)
     setGames(catalog)
+    setCatalogSource('gateway')
+    return catalog
+  }, [])
+
+  const loadFallbackCatalog = useCallback(async () => {
+    const response = await fetch('/fallback-catalog.json', { cache: 'no-store' })
+    if (!response.ok) {
+      throw new Error('Fallback catalog is unavailable. Run bun scripts/sync-games-to-web.mjs')
+    }
+    const payload = (await response.json()) as FallbackCatalog
+    const items = Array.isArray(payload.games) ? payload.games : []
+    const catalog = items
+      .map((item) => {
+        if (!item.id) return null
+        return toGame(item.id, item)
+      })
+      .filter((game): game is Game => game !== null)
+    if (catalog.length === 0) {
+      throw new Error('Fallback catalog has no valid games')
+    }
+    setGames(catalog)
+    setCatalogSource('fallback')
     return catalog
   }, [])
 
@@ -157,12 +184,17 @@ function App() {
         await loadCatalog(authToken)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to sync catalog'
-        setError(message)
+        try {
+          await loadFallbackCatalog()
+          setError(`${message}. Loaded fallback catalog.`)
+        } catch {
+          setError(message)
+        }
       } finally {
         setSyncing(false)
       }
     },
-    [loadCatalog],
+    [loadCatalog, loadFallbackCatalog],
   )
 
   const connectRealtime = useCallback(
@@ -260,11 +292,16 @@ function App() {
         }
         connectRealtime(authToken)
       } catch (err) {
-        if (!alive) {
-          return
+        try {
+          await loadFallbackCatalog()
+          if (!alive) return
+          const message = err instanceof Error ? err.message : 'Failed to initialize store'
+          setError(`${message}. Loaded fallback catalog.`)
+        } catch {
+          if (!alive) return
+          const message = err instanceof Error ? err.message : 'Failed to initialize store'
+          setError(message)
         }
-        const message = err instanceof Error ? err.message : 'Failed to initialize store'
-        setError(message)
       } finally {
         if (alive) {
           setLoading(false)
@@ -280,7 +317,7 @@ function App() {
         wsRef.current.close()
       }
     }
-  }, [connectRealtime, ensureToken, syncCatalog])
+  }, [connectRealtime, ensureToken, loadFallbackCatalog, syncCatalog])
 
   const filteredGames = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -338,7 +375,7 @@ function App() {
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="rounded-full border border-[#b99f80] bg-[#e8d7c3] px-3 py-1 text-[#5d4124]">
-                {token ? 'Gateway Connected' : 'Disconnected'}
+                {catalogSource === 'gateway' ? 'Gateway Catalog' : 'Fallback Catalog'}
               </span>
               <button
                 onClick={() => {

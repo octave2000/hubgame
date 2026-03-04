@@ -11,3 +11,4 @@
 - Redesigned UI to a calmer cozy look with larger game imagery, reduced initial text, no pricing labels, and softer lookup panel.
 - Connected store catalog to live gateway API (`:8080`) with dev token bootstrap and websocket-based realtime refresh.
 - Added documented backend seed flow so the live catalog can be populated with a versioned one-off command.
+- Added fallback catalog mode backed by `web/public/fallback-catalog.json` generated from `/games`.

@@ -26,3 +26,14 @@ bun scripts/publish-games.mjs
 
 Output file:
 - `games/.published/index.json`
+
+## Sync to Web Fallback Catalog
+Copy game packages and generate web fallback file:
+
+```bash
+bun scripts/sync-games-to-web.mjs
+```
+
+Outputs:
+- `web/public/games/*`
+- `web/public/fallback-catalog.json`
