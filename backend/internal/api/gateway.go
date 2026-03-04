@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,20 +17,24 @@ import (
 type gatewayClaimsKey struct{}
 
 type GatewayServer struct {
-	controller  *controllerclient.Client
-	authorizer  *controller.Authorizer
-	dbEngineURL string
-	internalKey string
-	http        *http.Client
+	controller           *controllerclient.Client
+	authorizer           *controller.Authorizer
+	dbEngineURL          string
+	internalKey          string
+	controllerAdminToken string
+	devAuthEnabled       bool
+	http                 *http.Client
 }
 
-func NewGatewayServer(controllerURL, dbEngineURL, internalKey string) *GatewayServer {
+func NewGatewayServer(controllerURL, dbEngineURL, internalKey, controllerAdminToken string, devAuthEnabled bool) *GatewayServer {
 	return &GatewayServer{
-		controller:  controllerclient.New(controllerURL),
-		authorizer:  controller.NewAuthorizer(),
-		dbEngineURL: strings.TrimRight(dbEngineURL, "/"),
-		internalKey: internalKey,
-		http:        &http.Client{Timeout: 10 * time.Second},
+		controller:           controllerclient.New(controllerURL),
+		authorizer:           controller.NewAuthorizer(),
+		dbEngineURL:          strings.TrimRight(dbEngineURL, "/"),
+		internalKey:          internalKey,
+		controllerAdminToken: controllerAdminToken,
+		devAuthEnabled:       devAuthEnabled,
+		http:                 &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -38,22 +43,68 @@ func (g *GatewayServer) Router() http.Handler {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "gateway"})
 	})
+	mux.HandleFunc("/v1/auth/dev-token", g.devTokenHandler)
 	mux.Handle("/v1/events/stream", g.requireAuth(g.requireAction(controller.ActionStreamRead, http.HandlerFunc(g.streamProxy))))
 	mux.Handle("/v1/entities", g.requireAuth(http.HandlerFunc(g.entitiesProxy)))
 	mux.Handle("/v1/entities/", g.requireAuth(http.HandlerFunc(g.entityByIDProxy)))
 	mux.Handle("/v1/events", g.requireAuth(http.HandlerFunc(g.eventsProxy)))
-	return mux
+	return withCORS(mux)
+}
+
+func (g *GatewayServer) devTokenHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !g.devAuthEnabled {
+		http.Error(w, "dev auth is disabled", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		UserID   string `json:"user_id"`
+		TenantID string `json:"tenant_id"`
+		Role     string `json:"role"`
+		TTL      int64  `json:"ttl_seconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if req.UserID == "" {
+		req.UserID = "web-dev-user"
+	}
+	if req.TenantID == "" {
+		req.TenantID = "hubgame-dev"
+	}
+	if req.Role == "" {
+		req.Role = "developer"
+	}
+	if req.TTL <= 0 {
+		req.TTL = 3600 * 6
+	}
+
+	token, err := g.controller.IssueToken(r.Context(), g.controllerAdminToken, req.UserID, req.TenantID, req.Role, req.TTL)
+	if err != nil {
+		http.Error(w, "failed to issue token", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
 func (g *GatewayServer) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			http.Error(w, "missing bearer token", http.StatusUnauthorized)
-			return
+		token := strings.TrimSpace(r.URL.Query().Get("access_token"))
+		if token == "" {
+			authHeader := r.Header.Get("Authorization")
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+				http.Error(w, "missing bearer token", http.StatusUnauthorized)
+				return
+			}
+			token = strings.TrimSpace(parts[1])
 		}
-		claims, err := g.controller.VerifyToken(r.Context(), parts[1])
+		claims, err := g.controller.VerifyToken(r.Context(), token)
 		if err != nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return

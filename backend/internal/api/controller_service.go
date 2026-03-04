@@ -24,7 +24,7 @@ func (s *ControllerService) Router() http.Handler {
 	})
 	mux.HandleFunc("/v1/auth/token", s.issueToken)
 	mux.HandleFunc("/v1/auth/verify", s.verifyToken)
-	return mux
+	return withCORS(mux)
 }
 
 func (s *ControllerService) issueToken(w http.ResponseWriter, r *http.Request) {

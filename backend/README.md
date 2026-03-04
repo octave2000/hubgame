@@ -1,6 +1,6 @@
 # HubGame Backend
 
-This backend now supports both:
+This backend supports:
 - `Monolith mode` (`backend/cmd/server`) for local development
 - `Split services` (`gateway`, `controller`, `db-engine`) for containerized deployment
 
@@ -12,6 +12,7 @@ This backend now supports both:
 - JWT auth controller service
 - RBAC action matrix at gateway
 - Gateway-to-db-engine internal service auth
+- Browser-ready CORS middleware for web integration
 
 ## Service Split
 - `gateway` (public): auth verify, RBAC enforcement, request forwarding, websocket proxy
@@ -30,9 +31,13 @@ docker compose up --build
 
 Public entrypoint: `http://localhost:8080`
 
-## Token Issuance (Split Mode)
-Issue token from controller:
+## Dev Token Endpoint (Gateway)
+When `HUBGAME_ENABLE_DEV_AUTH=true`, gateway exposes:
+- `POST /v1/auth/dev-token`
 
+This endpoint obtains a JWT from controller using internal admin credentials and is intended for local/dev only.
+
+## Token Issuance (Controller Direct)
 ```bash
 curl -X POST http://localhost:8082/v1/auth/token \
   -H 'Content-Type: application/json' \
@@ -41,19 +46,19 @@ curl -X POST http://localhost:8082/v1/auth/token \
 ```
 
 Use returned token on gateway endpoints:
-
 ```bash
-curl http://localhost:8080/v1/entities?kind=match \
+curl http://localhost:8080/v1/entities?kind=game \
   -H "Authorization: Bearer <TOKEN>"
 ```
 
 ## Endpoints
 Gateway (`:8080`):
 - `GET /healthz`
+- `POST /v1/auth/dev-token` (dev mode)
 - `GET|POST /v1/entities`
 - `GET|PATCH|DELETE /v1/entities/{id}`
 - `GET|POST /v1/events`
-- `GET /v1/events/stream?topic=entity.user` (WebSocket)
+- `GET /v1/events/stream?topic=entity.game`
 
 Controller (`:8082`):
 - `GET /healthz`

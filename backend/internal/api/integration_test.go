@@ -145,7 +145,7 @@ func setupIntegrationStack(t *testing.T) (controllerSrv, dbEngineSrv, gatewaySrv
 	auth := controller.NewAuthController(secret, issuer)
 	controllerSrv = httptest.NewServer(api.NewControllerService(auth, adminToken).Router())
 	dbEngineSrv = httptest.NewServer(api.NewDBEngineServer(store, internalToken).Router())
-	gatewaySrv = httptest.NewServer(api.NewGatewayServer(controllerSrv.URL, dbEngineSrv.URL, internalToken).Router())
+	gatewaySrv = httptest.NewServer(api.NewGatewayServer(controllerSrv.URL, dbEngineSrv.URL, internalToken, adminToken, true).Router())
 
 	cleanup = func() {
 		gatewaySrv.Close()

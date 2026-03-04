@@ -1,6 +1,9 @@
 package platform
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 type Config struct {
 	Addr                 string
@@ -11,6 +14,7 @@ type Config struct {
 	DBEngineURL          string
 	InternalServiceToken string
 	ControllerAdminToken string
+	EnableDevAuth        bool
 }
 
 func LoadConfig() Config {
@@ -23,6 +27,7 @@ func LoadConfig() Config {
 		DBEngineURL:          envOr("HUBGAME_DB_ENGINE_URL", "http://db-engine:8081"),
 		InternalServiceToken: envOr("HUBGAME_INTERNAL_TOKEN", "dev-internal-token"),
 		ControllerAdminToken: envOr("HUBGAME_CONTROLLER_ADMIN_TOKEN", "dev-controller-admin"),
+		EnableDevAuth:        envBool("HUBGAME_ENABLE_DEV_AUTH", true),
 	}
 	return cfg
 }
@@ -33,4 +38,12 @@ func envOr(key, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+func envBool(key string, fallback bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if v == "" {
+		return fallback
+	}
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }

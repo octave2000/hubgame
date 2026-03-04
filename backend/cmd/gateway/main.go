@@ -14,7 +14,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           api.NewGatewayServer(cfg.ControllerURL, cfg.DBEngineURL, cfg.InternalServiceToken).Router(),
+		Handler:           api.NewGatewayServer(cfg.ControllerURL, cfg.DBEngineURL, cfg.InternalServiceToken, cfg.ControllerAdminToken, cfg.EnableDevAuth).Router(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

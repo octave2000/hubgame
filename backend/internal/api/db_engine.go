@@ -30,7 +30,7 @@ func (s *DBEngineServer) Router() http.Handler {
 	mux.Handle("/v1/entities", s.requireInternal(http.HandlerFunc(s.entitiesHandler)))
 	mux.Handle("/v1/entities/", s.requireInternal(http.HandlerFunc(s.entityByIDHandler)))
 	mux.Handle("/v1/events", s.requireInternal(http.HandlerFunc(s.eventsHandler)))
-	return mux
+	return withCORS(mux)
 }
 
 func (s *DBEngineServer) requireInternal(next http.Handler) http.Handler {

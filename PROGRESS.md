@@ -11,3 +11,4 @@
 - Added end-to-end integration test for auth -> gateway -> db-engine flow, including websocket streaming and version conflict checks.
 - Added integration coverage for RBAC denial and unauthorized websocket handshake.
 - Added first web store UI (React + Tailwind) with advanced lookup, cozy modern design, and game-image-first browsing.
+- Integrated web store with live backend catalog via gateway API and realtime websocket updates.

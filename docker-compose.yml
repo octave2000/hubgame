@@ -39,6 +39,8 @@ services:
       HUBGAME_CONTROLLER_URL: "http://controller:8082"
       HUBGAME_DB_ENGINE_URL: "http://db-engine:8081"
       HUBGAME_INTERNAL_TOKEN: "dev-internal-token"
+      HUBGAME_CONTROLLER_ADMIN_TOKEN: "dev-controller-admin"
+      HUBGAME_ENABLE_DEV_AUTH: "true"
     depends_on:
       - controller
       - db-engine

@@ -40,7 +40,7 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/v1/entities/", s.auth.RequireAuth(http.HandlerFunc(s.entityByIDHandler)))
 	mux.Handle("/v1/events", s.auth.RequireAuth(http.HandlerFunc(s.eventsHandler)))
 
-	return logging(mux)
+	return withCORS(logging(mux))
 }
 
 func (s *Server) entitiesHandler(w http.ResponseWriter, r *http.Request) {
