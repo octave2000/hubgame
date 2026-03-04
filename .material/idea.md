@@ -391,3 +391,167 @@ Contribution guidelines:
 
 ## 18) One-Sentence Summary
 An open-source, containerized, Go-powered game center where any developer can ship games using an event-driven real-time backend with built-in chat/voice/reactions, starting with an advanced tic-tac-toe featuring collectible gameplay modifiers.
+
+---
+
+## 19) Database Backbone (Go) — Detailed Blueprint
+
+### 19.1 Position in HubGame
+The database backbone is not only a persistence layer. It is a **state + event + realtime core** with embedded controllers for policy enforcement.
+
+Responsibilities:
+- Durable storage (primary: SQLite-compatible mode, future pluggable engines)
+- Event sourcing (append-only timeline for state reconstruction)
+- Live subscriptions (native websocket fanout)
+- Embedded lifecycle controllers (auth, tenant rules, validation, anti-abuse)
+
+### 19.2 Storage Engine Model
+1. **Entity Store**
+- Multi-tenant records (`tenant_id`, `id`, `kind`, `data`, `version`, timestamps)
+- Soft delete + optimistic versioning
+- Secondary indexes by tenant/kind/update time
+
+2. **Event Store**
+- Append-only events (`topic`, `key_ref`, `type`, `payload`, `created_at`)
+- Ordered IDs for reliable replay
+- Per-topic scan for catch-up sync
+
+3. **Snapshot Layer (Phase 2)**
+- Periodic compressed snapshots for active matches/rooms
+- Replay from nearest snapshot + forward events
+- Fast warm-recovery on node restart
+
+4. **In-Memory Hot Cache (Phase 2/3)**
+- Track active match state in memory
+- Async flush + durability guarantees
+- Write-back strategy with bounded lag and health alarms
+
+### 19.3 Embedded Controller Pipeline
+Database operations pass through controller hooks:
+- `BeforeInsert`
+- `BeforeUpdate`
+- `BeforeDelete`
+- `BeforeAppendEvent`
+
+Controllers are composable and ordered, enabling reusable cross-cutting logic:
+- Tenant boundary enforcement
+- Role-based authorization checks
+- Payload schema validation
+- Rate-limits and flood protection
+- Audit metadata injection
+
+This creates a **policy-aware database**, not just CRUD storage.
+
+### 19.4 Native Realtime Streaming
+- Topic-based pub/sub from event store writes
+- WebSocket endpoint for low-latency subscriptions
+- Backpressure-safe broadcast semantics (drop policy + metrics)
+- Historical replay (`after_id`) + live tail pattern
+
+### 19.5 Planned Query and Write Features
+- Atomic transactions with batch operations
+- Conditional update with expected version (`CAS` semantics)
+- Upsert support for selected entity kinds
+- Range queries for timeline and analytics projections
+- TTL/retention policies for transient data
+
+### 19.6 SQLite-First, Engine-Flexible
+Initial runtime mode:
+- SQLite WAL mode for local durability and high concurrent reads
+- Busy timeout + tuned pragmas
+
+Future adapters:
+- PostgreSQL adapter for large distributed workloads
+- Embedded LSM mode for write-heavy telemetry/event channels
+
+The API surface remains stable through a storage interface.
+
+---
+
+## 20) Controller Backbone (Go) — Detailed Blueprint
+
+### 20.1 Core Scope
+Controller layer is the trust and governance engine:
+- Authentication (JWT/session flows)
+- Authorization (tenant + role + action)
+- Security policy execution inside DB hooks
+- Token tooling for API, WebSocket, CLI, bots
+
+### 20.2 Auth Model
+- Short-lived access token for API/WebSocket
+- Refresh token rotation (Phase 2)
+- Issuer/audience enforcement
+- Service account tokens for automation
+
+### 20.3 Authorization Model
+- Tenant isolation as hard baseline
+- Role matrix:
+  - `player`
+  - `moderator`
+  - `developer`
+  - `tenant_admin`
+  - `platform_admin`
+- Action-scoped permissions (`match.create`, `room.moderate`, `bot.run`)
+
+### 20.4 Security Add-ons
+- Event signing/verification for anti-tamper traces
+- Replay attack protection via nonce + expiry windows
+- Optional field-level encryption for sensitive user attributes
+- Audit trail streams for security operations
+
+---
+
+## 21) Testing and Reliability Strategy
+
+### 21.1 Database and Controller Test Matrix
+- Unit: CRUD/versioning/hook enforcement
+- Integration: auth middleware + DB hooks + websocket stream
+- Load: concurrent writes + fanout + replay scans
+- Chaos: abrupt restart + recovery from event log/snapshot
+
+### 21.2 Reliability Controls
+- Health checks per component
+- Migration version table + startup compatibility check
+- Structured logs with request/tenant correlation IDs
+- Metrics:
+  - write latency p50/p95/p99
+  - subscriber lag
+  - dropped events
+  - auth failure rate
+
+---
+
+## 22) Delivery Roadmap for Backbone (Execution)
+
+1. **Phase A: Foundation (Now)**
+- SQLite entity/event store
+- CRUD + append event APIs
+- WebSocket topic stream
+- JWT auth + tenant controller hooks
+
+2. **Phase B: Trust and Correctness**
+- RBAC action matrix
+- Schema validation controller
+- expected-version conditional updates
+- audit logging controller
+
+3. **Phase C: Performance and Scale**
+- snapshots + replay APIs
+- batch writes + transaction helpers
+- cache layer for hot matches
+- benchmark and profiling suite
+
+4. **Phase D: Production Hardening**
+- retention/compaction jobs
+- dead-letter event handling
+- backup/restore workflows
+- operational dashboards and alerting
+
+---
+
+## 23) Competitive/Unique Platform Advantages
+- **Controller-embedded database** for policy-aware persistence.
+- **Realtime-first event core** with replay + live tail in one model.
+- **Game-focused primitives** (rooms/matches/modifiers/social events) on top of generic storage.
+- **Container-native deployment** with minimal external dependencies.
+- **Open-source extensibility** for games, controllers, and tooling.
