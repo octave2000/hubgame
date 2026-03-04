@@ -226,6 +226,94 @@ func TestGatewayIntegrationLeaderboardGlobalAndGame(t *testing.T) {
 	}
 }
 
+func TestGatewayIntegrationTiktoeOnlineAndChat(t *testing.T) {
+	controllerSrv, _, gatewaySrv, cleanup := setupIntegrationStack(t)
+	defer cleanup()
+
+	devToken := issueToken(t, controllerSrv.URL, adminToken, "dev-1", "t-1", "developer")
+
+	first := requestJSON(t, http.MethodPost, gatewaySrv.URL+"/v1/tiktoe/matchmaking/enqueue", devToken, map[string]any{
+		"user_id":      "p1",
+		"display_name": "Player One",
+		"board_size":   3,
+		"win_length":   3,
+	}, nil)
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 first enqueue, got %d", first.StatusCode)
+	}
+	first.Body.Close()
+
+	second := requestJSON(t, http.MethodPost, gatewaySrv.URL+"/v1/tiktoe/matchmaking/enqueue", devToken, map[string]any{
+		"user_id":      "p2",
+		"display_name": "Player Two",
+		"board_size":   3,
+		"win_length":   3,
+	}, nil)
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 second enqueue, got %d", second.StatusCode)
+	}
+	var matched struct {
+		Status string `json:"status"`
+		Match  struct {
+			ID string `json:"id"`
+		} `json:"match"`
+	}
+	if err := json.NewDecoder(second.Body).Decode(&matched); err != nil {
+		t.Fatalf("decode matched response: %v", err)
+	}
+	second.Body.Close()
+	if matched.Status != "matched" || matched.Match.ID == "" {
+		t.Fatalf("expected matched status with match id")
+	}
+	moveUser := "p1"
+	if matched.Match.ID != "" {
+		// current turn starts with player_x in server state
+		var matchState struct {
+			PlayerX string `json:"player_x"`
+		}
+		matchResp := requestJSON(t, http.MethodGet, gatewaySrv.URL+"/v1/tiktoe/matches/"+matched.Match.ID, devToken, nil, nil)
+		if matchResp.StatusCode == http.StatusOK {
+			if err := json.NewDecoder(matchResp.Body).Decode(&matchState); err == nil && matchState.PlayerX != "" {
+				moveUser = matchState.PlayerX
+			}
+		}
+		matchResp.Body.Close()
+	}
+
+	move := requestJSON(t, http.MethodPost, gatewaySrv.URL+"/v1/tiktoe/matches/"+matched.Match.ID+"/moves", devToken, map[string]any{
+		"user_id": moveUser,
+		"row":     0,
+		"col":     0,
+	}, nil)
+	if move.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 move, got %d", move.StatusCode)
+	}
+	move.Body.Close()
+
+	chat := requestJSON(t, http.MethodPost, gatewaySrv.URL+"/v1/tiktoe/matches/"+matched.Match.ID+"/chat", devToken, map[string]any{
+		"user_id": moveUser,
+		"message": "gg",
+		"emoji":   "🔥",
+	}, nil)
+	if chat.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 chat, got %d", chat.StatusCode)
+	}
+	chat.Body.Close()
+
+	chatList := requestJSON(t, http.MethodGet, gatewaySrv.URL+"/v1/tiktoe/matches/"+matched.Match.ID+"/chat?limit=10", devToken, nil, nil)
+	if chatList.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 chat list, got %d", chatList.StatusCode)
+	}
+	var msgs []map[string]any
+	if err := json.NewDecoder(chatList.Body).Decode(&msgs); err != nil {
+		t.Fatalf("decode chat list: %v", err)
+	}
+	chatList.Body.Close()
+	if len(msgs) == 0 {
+		t.Fatalf("expected at least one chat message")
+	}
+}
+
 func setupIntegrationStack(t *testing.T) (controllerSrv, dbEngineSrv, gatewaySrv *httptest.Server, cleanup func()) {
 	t.Helper()
 

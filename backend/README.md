@@ -78,6 +78,12 @@ Gateway (`:8080`):
 - `GET /v1/leaderboard?scope=global|game&game_id=<id>&limit=<n>`
 - `POST /v1/leaderboard/users`
 - `POST /v1/leaderboard/scores`
+- `POST /v1/tiktoe/matches` (create offline/bot/online match state)
+- `GET /v1/tiktoe/matches/{match_id}`
+- `POST /v1/tiktoe/matches/{match_id}/moves`
+- `GET|POST /v1/tiktoe/matches/{match_id}/chat`
+- `POST /v1/tiktoe/matchmaking/enqueue`
+- `GET /v1/tiktoe/matchmaking/status`
 
 Controller (`:8082`):
 - `GET /healthz`

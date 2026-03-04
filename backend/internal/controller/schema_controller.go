@@ -38,6 +38,9 @@ func validateEntitySchema(kind string, data json.RawMessage) error {
 		"game":              {"name", "studio", "category", "modes", "vibe", "cover"},
 		"leaderboard_user":  {"user_id", "display_name"},
 		"leaderboard_score": {"game_id", "user_id", "score", "hubcoins"},
+		"tiktoe_match":      {"id", "mode", "board_size", "win_length", "board", "current"},
+		"tiktoe_queue":      {"user_id", "display_name"},
+		"tiktoe_chat":       {"id", "match_id", "user_id", "type"},
 	}
 	return validateRequiredFields("entity", kind, data, requiredByKind)
 }
@@ -53,6 +56,10 @@ func validateEventSchema(eventType string, payload json.RawMessage) error {
 		"chat.send":                   {"room_id", "message"},
 		"reaction.send":               {"room_id", "emoji"},
 		"leaderboard.score_submitted": {"game_id", "user_id", "score", "hubcoins"},
+		"tiktoe.match_created":        {"id", "mode", "board_size", "win_length"},
+		"tiktoe.match_found":          {"id", "player_x", "player_o"},
+		"tiktoe.move":                 {"id", "board", "current"},
+		"tiktoe.chat":                 {"id", "match_id", "user_id", "type"},
 	}
 	return validateRequiredFields("event", eventType, payload, requiredByType)
 }

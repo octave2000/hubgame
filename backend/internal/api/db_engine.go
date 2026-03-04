@@ -33,6 +33,10 @@ func (s *DBEngineServer) Router() http.Handler {
 	mux.Handle("/v1/leaderboard", s.requireInternal(http.HandlerFunc(s.leaderboardHandler)))
 	mux.Handle("/v1/leaderboard/users", s.requireInternal(http.HandlerFunc(s.leaderboardUsersHandler)))
 	mux.Handle("/v1/leaderboard/scores", s.requireInternal(http.HandlerFunc(s.leaderboardScoresHandler)))
+	mux.Handle("/v1/tiktoe/matches", s.requireInternal(http.HandlerFunc(s.tiktoeMatchesHandler)))
+	mux.Handle("/v1/tiktoe/matches/", s.requireInternal(http.HandlerFunc(s.tiktoeMatchByIDHandler)))
+	mux.Handle("/v1/tiktoe/matchmaking/enqueue", s.requireInternal(http.HandlerFunc(s.tiktoeMatchmakingEnqueueHandler)))
+	mux.Handle("/v1/tiktoe/matchmaking/status", s.requireInternal(http.HandlerFunc(s.tiktoeMatchmakingStatusHandler)))
 	return withCORS(mux)
 }
 
@@ -283,4 +287,148 @@ func (s *DBEngineServer) leaderboardHandler(w http.ResponseWriter, r *http.Reque
 		"game_id": gameID,
 		"items":   rows,
 	})
+}
+
+func (s *DBEngineServer) tiktoeMatchesHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := s.tenantID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req createMatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	match, err := createTiktoeMatch(r.Context(), s.store, tenantID, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusCreated, match)
+}
+
+func (s *DBEngineServer) tiktoeMatchByIDHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := s.tenantID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/v1/tiktoe/matches/")
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.Error(w, "match id is required", http.StatusBadRequest)
+		return
+	}
+	matchID := parts[0]
+
+	if len(parts) == 1 && r.Method == http.MethodGet {
+		match, err := loadTiktoeMatch(r.Context(), s.store, tenantID, matchID)
+		if errors.Is(err, database.ErrNotFound) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, match)
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "moves" && r.Method == http.MethodPost {
+		var req moveRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		match, err := applyTiktoeMove(r.Context(), s.store, tenantID, matchID, req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, match)
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "chat" {
+		if r.Method == http.MethodGet {
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			items, err := listTiktoeChat(r.Context(), s.store, tenantID, matchID, limit)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, http.StatusOK, items)
+			return
+		}
+		if r.Method == http.MethodPost {
+			var req chatRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			msg, err := postTiktoeChat(r.Context(), s.store, tenantID, matchID, req)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, http.StatusCreated, msg)
+			return
+		}
+	}
+
+	http.Error(w, "not found", http.StatusNotFound)
+}
+
+func (s *DBEngineServer) tiktoeMatchmakingEnqueueHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := s.tenantID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req enqueueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	result, err := enqueueTiktoe(r.Context(), s.store, tenantID, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *DBEngineServer) tiktoeMatchmakingStatusHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := s.tenantID(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	if userID == "" {
+		http.Error(w, "user_id is required", http.StatusBadRequest)
+		return
+	}
+	boardSize, _ := strconv.Atoi(r.URL.Query().Get("board_size"))
+	winLength, _ := strconv.Atoi(r.URL.Query().Get("win_length"))
+	status, err := tiktoeQueueStatus(r.Context(), s.store, tenantID, userID, boardSize, winLength)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
 }

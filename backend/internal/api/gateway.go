@@ -47,6 +47,10 @@ func (g *GatewayServer) Router() http.Handler {
 	mux.Handle("/v1/leaderboard", g.requireAuth(http.HandlerFunc(g.leaderboardHandler)))
 	mux.Handle("/v1/leaderboard/users", g.requireAuth(http.HandlerFunc(g.leaderboardUsersHandler)))
 	mux.Handle("/v1/leaderboard/scores", g.requireAuth(http.HandlerFunc(g.leaderboardScoresHandler)))
+	mux.Handle("/v1/tiktoe/matches", g.requireAuth(http.HandlerFunc(g.tiktoeMatchesHandler)))
+	mux.Handle("/v1/tiktoe/matches/", g.requireAuth(http.HandlerFunc(g.tiktoeMatchByIDHandler)))
+	mux.Handle("/v1/tiktoe/matchmaking/enqueue", g.requireAuth(http.HandlerFunc(g.tiktoeMatchmakingEnqueueHandler)))
+	mux.Handle("/v1/tiktoe/matchmaking/status", g.requireAuth(http.HandlerFunc(g.tiktoeMatchmakingStatusHandler)))
 	mux.Handle("/v1/events/stream", g.requireAuth(g.requireAction(controller.ActionStreamRead, http.HandlerFunc(g.streamProxy))))
 	mux.Handle("/v1/entities", g.requireAuth(http.HandlerFunc(g.entitiesProxy)))
 	mux.Handle("/v1/entities/", g.requireAuth(http.HandlerFunc(g.entityByIDProxy)))
@@ -212,6 +216,64 @@ func (g *GatewayServer) leaderboardScoresHandler(w http.ResponseWriter, r *http.
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
+	}
+	g.proxyHTTP(w, r, claims.TenantID)
+}
+
+func (g *GatewayServer) tiktoeMatchesHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := gatewayClaimsFromContext(r.Context())
+	if r.Method == http.MethodPost {
+		if err := g.authorizer.Enforce(claims, controller.ActionEntityWrite); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+	} else if r.Method == http.MethodGet {
+		if err := g.authorizer.Enforce(claims, controller.ActionEntityRead); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+	}
+	g.proxyHTTP(w, r, claims.TenantID)
+}
+
+func (g *GatewayServer) tiktoeMatchByIDHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := gatewayClaimsFromContext(r.Context())
+	switch r.Method {
+	case http.MethodGet:
+		if err := g.authorizer.Enforce(claims, controller.ActionEntityRead); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+	case http.MethodPost:
+		if strings.HasSuffix(r.URL.Path, "/chat") {
+			if err := g.authorizer.Enforce(claims, controller.ActionEventWrite); err != nil {
+				http.Error(w, err.Error(), http.StatusForbidden)
+				return
+			}
+		} else {
+			if err := g.authorizer.Enforce(claims, controller.ActionEntityWrite); err != nil {
+				http.Error(w, err.Error(), http.StatusForbidden)
+				return
+			}
+		}
+	}
+	g.proxyHTTP(w, r, claims.TenantID)
+}
+
+func (g *GatewayServer) tiktoeMatchmakingEnqueueHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := gatewayClaimsFromContext(r.Context())
+	if err := g.authorizer.Enforce(claims, controller.ActionEntityWrite); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	g.proxyHTTP(w, r, claims.TenantID)
+}
+
+func (g *GatewayServer) tiktoeMatchmakingStatusHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := gatewayClaimsFromContext(r.Context())
+	if err := g.authorizer.Enforce(claims, controller.ActionEntityRead); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
 	}
 	g.proxyHTTP(w, r, claims.TenantID)
 }
