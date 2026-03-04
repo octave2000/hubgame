@@ -173,6 +173,7 @@ function App() {
       <div className="store-glow store-glow-a" />
       <div className="store-glow store-glow-b" />
       <div className="store-grid" />
+      <div className="store-grid-reactive" />
       <div className="store-grid-fine" />
 
       <main className="relative mx-auto max-w-[1300px] px-4 pb-14 pt-8 sm:px-6 lg:px-8">
