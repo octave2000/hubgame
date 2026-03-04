@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,13 +14,19 @@ import (
 )
 
 type Server struct {
-	store *database.Store
-	auth  *controller.AuthController
-	ws    *realtime.Handler
+	store      *database.Store
+	auth       *controller.AuthController
+	authorizer *controller.Authorizer
+	ws         *realtime.Handler
 }
 
 func NewServer(store *database.Store, auth *controller.AuthController) *Server {
-	return &Server{store: store, auth: auth, ws: realtime.NewHandler(store.Broker())}
+	return &Server{
+		store:      store,
+		auth:       auth,
+		authorizer: controller.NewAuthorizer(),
+		ws:         realtime.NewHandler(store.Broker()),
+	}
 }
 
 func (s *Server) Router() http.Handler {
@@ -30,7 +35,7 @@ func (s *Server) Router() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	mux.Handle("/v1/events/stream", s.auth.RequireAuth(http.HandlerFunc(s.ws.Stream)))
+	mux.Handle("/v1/events/stream", s.auth.RequireAuth(s.requireAction(controller.ActionStreamRead, http.HandlerFunc(s.ws.Stream))))
 	mux.Handle("/v1/entities", s.auth.RequireAuth(http.HandlerFunc(s.entitiesHandler)))
 	mux.Handle("/v1/entities/", s.auth.RequireAuth(http.HandlerFunc(s.entityByIDHandler)))
 	mux.Handle("/v1/events", s.auth.RequireAuth(http.HandlerFunc(s.eventsHandler)))
@@ -42,6 +47,10 @@ func (s *Server) entitiesHandler(w http.ResponseWriter, r *http.Request) {
 	claims, _ := controller.ClaimsFromContext(r.Context())
 	switch r.Method {
 	case http.MethodGet:
+		if err := s.authorizer.Enforce(claims, controller.ActionEntityRead); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		kind := r.URL.Query().Get("kind")
 		if kind == "" {
 			http.Error(w, "kind is required", http.StatusBadRequest)
@@ -55,6 +64,10 @@ func (s *Server) entitiesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, items)
 	case http.MethodPost:
+		if err := s.authorizer.Enforce(claims, controller.ActionEntityWrite); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		var req struct {
 			ID   string          `json:"id"`
 			Kind string          `json:"kind"`
@@ -65,7 +78,7 @@ func (s *Server) entitiesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		e := &database.Entity{ID: req.ID, TenantID: claims.TenantID, Kind: req.Kind, Data: req.Data}
-		ctx := context.WithValue(r.Context(), contextKeyClaims{}, claims)
+		ctx := withClaimsForStorage(r.Context(), claims)
 		if err := s.store.InsertEntity(ctx, e); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -86,6 +99,10 @@ func (s *Server) entityByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if err := s.authorizer.Enforce(claims, controller.ActionEntityRead); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		e, err := s.store.GetEntity(r.Context(), claims.TenantID, id)
 		if errors.Is(err, database.ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -97,6 +114,10 @@ func (s *Server) entityByIDHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, e)
 	case http.MethodPatch:
+		if err := s.authorizer.Enforce(claims, controller.ActionEntityWrite); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		var req struct {
 			Data json.RawMessage `json:"data"`
 		}
@@ -105,14 +126,32 @@ func (s *Server) entityByIDHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		e := &database.Entity{ID: id, TenantID: claims.TenantID, Data: req.Data}
-		ctx := context.WithValue(r.Context(), contextKeyClaims{}, claims)
-		if err := s.store.UpdateEntity(ctx, e); err != nil {
+		expectedVersion, hasExpectedVersion, err := parseIfMatchVersion(r.Header.Get("If-Match"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		ctx := withClaimsForStorage(r.Context(), claims)
+		if hasExpectedVersion {
+			err = s.store.UpdateEntityWithVersion(ctx, e, &expectedVersion)
+		} else {
+			err = s.store.UpdateEntity(ctx, e)
+		}
+		if errors.Is(err, database.ErrVersionConflict) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	case http.MethodDelete:
-		ctx := context.WithValue(r.Context(), contextKeyClaims{}, claims)
+		if err := s.authorizer.Enforce(claims, controller.ActionEntityDelete); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		ctx := withClaimsForStorage(r.Context(), claims)
 		if err := s.store.DeleteEntity(ctx, claims.TenantID, id); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -127,6 +166,10 @@ func (s *Server) eventsHandler(w http.ResponseWriter, r *http.Request) {
 	claims, _ := controller.ClaimsFromContext(r.Context())
 	switch r.Method {
 	case http.MethodGet:
+		if err := s.authorizer.Enforce(claims, controller.ActionEventRead); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		topic := r.URL.Query().Get("topic")
 		if topic == "" {
 			http.Error(w, "topic is required", http.StatusBadRequest)
@@ -141,6 +184,10 @@ func (s *Server) eventsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, events)
 	case http.MethodPost:
+		if err := s.authorizer.Enforce(claims, controller.ActionEventWrite); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		var req struct {
 			Topic   string          `json:"topic"`
 			Key     string          `json:"key"`
@@ -151,7 +198,7 @@ func (s *Server) eventsHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid json", http.StatusBadRequest)
 			return
 		}
-		ctx := context.WithValue(r.Context(), contextKeyClaims{}, claims)
+		ctx := withClaimsForStorage(r.Context(), claims)
 		ev, err := s.store.AppendEvent(ctx, database.Event{
 			TenantID: claims.TenantID,
 			Topic:    req.Topic,
@@ -169,8 +216,6 @@ func (s *Server) eventsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type contextKeyClaims struct{}
-
 func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -179,8 +224,33 @@ func logging(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) requireAction(action string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, _ := controller.ClaimsFromContext(r.Context())
+		if err := s.authorizer.Enforce(claims, action); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func parseIfMatchVersion(v string) (int64, bool, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false, nil
+	}
+	v = strings.TrimPrefix(v, "W/")
+	v = strings.Trim(v, "\"")
+	parsed, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0, false, errors.New("If-Match must be a numeric version")
+	}
+	return parsed, true, nil
 }

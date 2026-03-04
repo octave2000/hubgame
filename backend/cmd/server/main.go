@@ -24,6 +24,7 @@ func main() {
 
 	auth := controller.NewAuthController(cfg.JWTSecret, cfg.Issuer)
 	store.RegisterController(controller.NewStorageTenantController(api.StorageClaimsExtractor))
+	store.RegisterController(controller.SchemaController{})
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

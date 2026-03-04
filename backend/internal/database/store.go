@@ -12,6 +12,7 @@ import (
 )
 
 var ErrNotFound = errors.New("not found")
+var ErrVersionConflict = errors.New("version conflict")
 
 type Store struct {
 	db          *sql.DB
@@ -132,9 +133,16 @@ FROM entities WHERE tenant_id = ? AND id = ?
 }
 
 func (s *Store) UpdateEntity(ctx context.Context, next *Entity) error {
+	return s.UpdateEntityWithVersion(ctx, next, nil)
+}
+
+func (s *Store) UpdateEntityWithVersion(ctx context.Context, next *Entity, expectedVersion *int64) error {
 	current, err := s.GetEntity(ctx, next.TenantID, next.ID)
 	if err != nil {
 		return err
+	}
+	if expectedVersion != nil && current.Version != *expectedVersion {
+		return ErrVersionConflict
 	}
 	next.Kind = current.Kind
 	next.CreatedAt = current.CreatedAt
@@ -151,14 +159,14 @@ func (s *Store) UpdateEntity(ctx context.Context, next *Entity) error {
 	res, err := s.db.ExecContext(ctx, `
 UPDATE entities
 SET data = ?, version = ?, updated_at = ?
-WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL
-`, string(next.Data), next.Version, next.UpdatedAt, next.TenantID, next.ID)
+WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL AND version = ?
+`, string(next.Data), next.Version, next.UpdatedAt, next.TenantID, next.ID, current.Version)
 	if err != nil {
 		return err
 	}
 	affected, _ := res.RowsAffected()
 	if affected == 0 {
-		return ErrNotFound
+		return ErrVersionConflict
 	}
 	_, _ = s.AppendEvent(ctx, Event{
 		TenantID: next.TenantID,

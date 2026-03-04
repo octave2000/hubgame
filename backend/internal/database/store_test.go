@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -50,5 +51,37 @@ func TestStoreCRUDAndEvents(t *testing.T) {
 	}
 	if len(events) != 3 {
 		t.Fatalf("expected 3 events, got %d", len(events))
+	}
+}
+
+func TestUpdateEntityWithVersionConflict(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenSQLite(ctx, "file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer store.Close()
+
+	e := &Entity{
+		ID:       "m-1",
+		TenantID: "t-1",
+		Kind:     "match",
+		Data:     json.RawMessage(`{"mode":"pvp","status":"created"}`),
+	}
+	if err := store.InsertEntity(ctx, e); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	expected := int64(99)
+	err = store.UpdateEntityWithVersion(ctx, &Entity{
+		ID:       "m-1",
+		TenantID: "t-1",
+		Data:     json.RawMessage(`{"mode":"pvp","status":"running"}`),
+	}, &expected)
+	if err == nil {
+		t.Fatalf("expected version conflict error")
+	}
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict, got %v", err)
 	}
 }
