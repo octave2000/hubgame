@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Serif+Display:ital@0;1&display=swap');
+@import 'tailwindcss';
+
+:root {
+  --font-sans: 'Manrope', 'Segoe UI', sans-serif;
+  --font-display: 'DM Serif Display', 'Times New Roman', serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: radial-gradient(circle at top right, #f4e8db 0%, #f5f2ed 40%, #f3f1ed 100%);
+  font-family: var(--font-sans);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-sans {
+  font-family: var(--font-sans);
+}
