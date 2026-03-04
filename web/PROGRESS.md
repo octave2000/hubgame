@@ -12,3 +12,4 @@
 - Connected store catalog to live gateway API (`:8080`) with dev token bootstrap and websocket-based realtime refresh.
 - Added documented backend seed flow so the live catalog can be populated with a versioned one-off command.
 - Added fallback catalog mode backed by `web/public/fallback-catalog.json` generated from `/games`.
+- Added leaderboard UI module with switchable global/per-game ranking and hubcoins display from backend endpoints.

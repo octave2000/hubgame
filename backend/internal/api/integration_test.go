@@ -132,6 +132,100 @@ func TestGatewayIntegrationRBACAndUnauthorizedWebsocket(t *testing.T) {
 	_ = wsConn.Close()
 }
 
+func TestGatewayIntegrationLeaderboardGlobalAndGame(t *testing.T) {
+	controllerSrv, _, gatewaySrv, cleanup := setupIntegrationStack(t)
+	defer cleanup()
+
+	devToken := issueToken(t, controllerSrv.URL, adminToken, "dev-1", "t-1", "developer")
+
+	u1 := requestJSON(t, http.MethodPost, gatewaySrv.URL+"/v1/leaderboard/users", devToken, map[string]any{
+		"user_id":      "u-1",
+		"display_name": "Ada",
+		"rank_title":   "Bronze",
+	}, nil)
+	if u1.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 create leaderboard user, got %d", u1.StatusCode)
+	}
+	u1.Body.Close()
+
+	u2 := requestJSON(t, http.MethodPost, gatewaySrv.URL+"/v1/leaderboard/users", devToken, map[string]any{
+		"user_id":      "u-2",
+		"display_name": "Turing",
+		"rank_title":   "Silver",
+	}, nil)
+	if u2.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 create leaderboard user 2, got %d", u2.StatusCode)
+	}
+	u2.Body.Close()
+
+	s1 := requestJSON(t, http.MethodPost, gatewaySrv.URL+"/v1/leaderboard/scores", devToken, map[string]any{
+		"game_id":        "tik-toe",
+		"user_id":        "u-1",
+		"score_delta":    12,
+		"hubcoins_delta": 30,
+	}, nil)
+	if s1.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 score submit, got %d", s1.StatusCode)
+	}
+	s1.Body.Close()
+
+	s2 := requestJSON(t, http.MethodPost, gatewaySrv.URL+"/v1/leaderboard/scores", devToken, map[string]any{
+		"game_id":        "tik-toe",
+		"user_id":        "u-2",
+		"score_delta":    20,
+		"hubcoins_delta": 10,
+	}, nil)
+	if s2.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 score submit 2, got %d", s2.StatusCode)
+	}
+	s2.Body.Close()
+
+	gameLB := requestJSON(t, http.MethodGet, gatewaySrv.URL+"/v1/leaderboard?scope=game&game_id=tik-toe&limit=5", devToken, nil, nil)
+	if gameLB.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 game leaderboard, got %d", gameLB.StatusCode)
+	}
+	var gamePayload struct {
+		Items []struct {
+			Rank        int    `json:"rank"`
+			UserID      string `json:"user_id"`
+			DisplayName string `json:"display_name"`
+			Score       int    `json:"score"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(gameLB.Body).Decode(&gamePayload); err != nil {
+		t.Fatalf("decode game leaderboard: %v", err)
+	}
+	gameLB.Body.Close()
+	if len(gamePayload.Items) < 2 {
+		t.Fatalf("expected at least 2 leaderboard rows, got %d", len(gamePayload.Items))
+	}
+	if gamePayload.Items[0].UserID != "u-2" {
+		t.Fatalf("expected u-2 top rank, got %s", gamePayload.Items[0].UserID)
+	}
+
+	globalLB := requestJSON(t, http.MethodGet, gatewaySrv.URL+"/v1/leaderboard?scope=global&limit=5", devToken, nil, nil)
+	if globalLB.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 global leaderboard, got %d", globalLB.StatusCode)
+	}
+	var globalPayload struct {
+		Items []struct {
+			UserID      string `json:"user_id"`
+			GamesPlayed int    `json:"games_played"`
+			Hubcoins    int    `json:"hubcoins"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(globalLB.Body).Decode(&globalPayload); err != nil {
+		t.Fatalf("decode global leaderboard: %v", err)
+	}
+	globalLB.Body.Close()
+	if len(globalPayload.Items) == 0 {
+		t.Fatalf("expected global leaderboard rows")
+	}
+	if globalPayload.Items[0].GamesPlayed == 0 {
+		t.Fatalf("expected non-zero games played for top user")
+	}
+}
+
 func setupIntegrationStack(t *testing.T) (controllerSrv, dbEngineSrv, gatewaySrv *httptest.Server, cleanup func()) {
 	t.Helper()
 

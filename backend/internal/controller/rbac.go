@@ -6,12 +6,14 @@ import (
 )
 
 const (
-	ActionEntityRead   = "entity.read"
-	ActionEntityWrite  = "entity.write"
-	ActionEntityDelete = "entity.delete"
-	ActionEventRead    = "event.read"
-	ActionEventWrite   = "event.write"
-	ActionStreamRead   = "stream.read"
+	ActionEntityRead       = "entity.read"
+	ActionEntityWrite      = "entity.write"
+	ActionEntityDelete     = "entity.delete"
+	ActionEventRead        = "event.read"
+	ActionEventWrite       = "event.write"
+	ActionStreamRead       = "stream.read"
+	ActionLeaderboardRead  = "leaderboard.read"
+	ActionLeaderboardWrite = "leaderboard.write"
 )
 
 type Authorizer struct {
@@ -25,6 +27,7 @@ func NewAuthorizer() *Authorizer {
 			ActionEventRead,
 			ActionEventWrite,
 			ActionStreamRead,
+			ActionLeaderboardRead,
 		},
 		"moderator": {
 			ActionEntityRead,
@@ -32,6 +35,8 @@ func NewAuthorizer() *Authorizer {
 			ActionEventRead,
 			ActionEventWrite,
 			ActionStreamRead,
+			ActionLeaderboardRead,
+			ActionLeaderboardWrite,
 		},
 		"developer": {
 			ActionEntityRead,
@@ -40,6 +45,8 @@ func NewAuthorizer() *Authorizer {
 			ActionEventRead,
 			ActionEventWrite,
 			ActionStreamRead,
+			ActionLeaderboardRead,
+			ActionLeaderboardWrite,
 		},
 		"tenant_admin": {
 			ActionEntityRead,
@@ -48,6 +55,8 @@ func NewAuthorizer() *Authorizer {
 			ActionEventRead,
 			ActionEventWrite,
 			ActionStreamRead,
+			ActionLeaderboardRead,
+			ActionLeaderboardWrite,
 		},
 		"platform_admin": {
 			ActionEntityRead,
@@ -56,6 +65,8 @@ func NewAuthorizer() *Authorizer {
 			ActionEventRead,
 			ActionEventWrite,
 			ActionStreamRead,
+			ActionLeaderboardRead,
+			ActionLeaderboardWrite,
 		},
 	}
 

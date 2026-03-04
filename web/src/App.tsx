@@ -23,6 +23,17 @@ type FallbackCatalog = {
   games?: Array<Partial<Game> & { id?: string }>
 }
 
+type LeaderboardItem = {
+  rank: number
+  user_id: string
+  display_name: string
+  game_id?: string
+  score: number
+  hubcoins: number
+  rank_title?: string
+  games_played?: number
+}
+
 const seedCatalog: Game[] = [
   {
     id: 'mod-grid',
@@ -136,6 +147,9 @@ function App() {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
   const [catalogSource, setCatalogSource] = useState<'gateway' | 'fallback'>('gateway')
+  const [leaderboardScope, setLeaderboardScope] = useState<'global' | 'game'>('global')
+  const [leaderboardItems, setLeaderboardItems] = useState<LeaderboardItem[]>([])
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false)
 
   const loadCatalog = useCallback(async (authToken: string) => {
     const response = await fetch(`${gatewayURL}/v1/entities?kind=game`, {
@@ -195,6 +209,40 @@ function App() {
       }
     },
     [loadCatalog, loadFallbackCatalog],
+  )
+
+  const loadLeaderboard = useCallback(
+    async (authToken: string, scope: 'global' | 'game', gameID?: string) => {
+      if (catalogSource === 'fallback') {
+        const fallback = games
+          .map((game, index) => ({
+            rank: index + 1,
+            user_id: game.id,
+            display_name: game.name,
+            game_id: game.id,
+            score: Math.round(game.rating * 1000),
+            hubcoins: Math.round(game.rating * 120),
+            rank_title: 'Fallback',
+            games_played: 1,
+          }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 12)
+        setLeaderboardItems(fallback)
+        return
+      }
+
+      const params = new URLSearchParams({ scope, limit: '12' })
+      if (scope === 'game' && gameID) params.set('game_id', gameID)
+      const response = await fetch(`${gatewayURL}/v1/leaderboard?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      })
+      if (!response.ok) {
+        throw new Error(`Leaderboard request failed (${response.status})`)
+      }
+      const payload = (await response.json()) as { items?: LeaderboardItem[] }
+      setLeaderboardItems(Array.isArray(payload.items) ? payload.items : [])
+    },
+    [catalogSource, games],
   )
 
   const connectRealtime = useCallback(
@@ -290,6 +338,11 @@ function App() {
         if (!alive) {
           return
         }
+        setLeaderboardLoading(true)
+        await loadLeaderboard(authToken, 'global')
+        if (!alive) {
+          return
+        }
         connectRealtime(authToken)
       } catch (err) {
         try {
@@ -304,6 +357,7 @@ function App() {
         }
       } finally {
         if (alive) {
+          setLeaderboardLoading(false)
           setLoading(false)
         }
       }
@@ -317,7 +371,24 @@ function App() {
         wsRef.current.close()
       }
     }
-  }, [connectRealtime, ensureToken, loadFallbackCatalog, syncCatalog])
+  }, [connectRealtime, ensureToken, loadFallbackCatalog, loadLeaderboard, syncCatalog])
+
+  useEffect(() => {
+    const run = async () => {
+      if (!token && catalogSource !== 'fallback') return
+      setLeaderboardLoading(true)
+      try {
+        if (leaderboardScope === 'game') {
+          await loadLeaderboard(token, 'game', selectedGame?.id || games[0]?.id)
+        } else {
+          await loadLeaderboard(token, 'global')
+        }
+      } finally {
+        setLeaderboardLoading(false)
+      }
+    }
+    void run()
+  }, [catalogSource, games, leaderboardScope, loadLeaderboard, selectedGame?.id, token])
 
   const filteredGames = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -488,6 +559,66 @@ function App() {
           </p>
         </div>
 
+        <section className="mb-5 rounded-3xl border border-[#c9b193] bg-[#f2e6d6]/90 p-4 shadow-[0_10px_22px_rgba(66,44,21,0.08)] sm:p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-display text-2xl text-[#3f2f21]">Leaderboards</h3>
+              <p className="text-xs uppercase tracking-[0.14em] text-[#735238]">
+                {leaderboardScope === 'global' ? 'HubGame Overall Ranking' : `Top for ${selectedGame?.name || games[0]?.name || 'Game'}`}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLeaderboardScope('global')}
+                className={`rounded-full border px-3 py-1 text-xs ${
+                  leaderboardScope === 'global'
+                    ? 'border-[#715133] bg-[#7f5e3d] text-[#fff6ea]'
+                    : 'border-[#cfb79b] bg-[#efdfca] text-[#6e4f31]'
+                }`}
+              >
+                Global
+              </button>
+              <button
+                onClick={() => setLeaderboardScope('game')}
+                className={`rounded-full border px-3 py-1 text-xs ${
+                  leaderboardScope === 'game'
+                    ? 'border-[#715133] bg-[#7f5e3d] text-[#fff6ea]'
+                    : 'border-[#cfb79b] bg-[#efdfca] text-[#6e4f31]'
+                }`}
+              >
+                Per Game
+              </button>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            {leaderboardLoading ? (
+              <p className="text-sm text-[#6d5035]">Loading leaderboard...</p>
+            ) : leaderboardItems.length === 0 ? (
+              <p className="text-sm text-[#6d5035]">No leaderboard entries yet.</p>
+            ) : (
+              leaderboardItems.map((item) => (
+                <div
+                  key={`${item.user_id}-${item.game_id || 'global'}`}
+                  className="grid grid-cols-[40px_1fr_auto_auto] items-center gap-3 rounded-xl border border-[#d2b89a] bg-[#f7efe4] px-3 py-2 text-sm"
+                >
+                  <span className="text-center font-semibold text-[#7a5838]">#{item.rank}</span>
+                  <div>
+                    <p className="font-medium text-[#4d3421]">{item.display_name}</p>
+                    <p className="text-xs text-[#7f6246]">
+                      {item.rank_title || 'Rookie'}
+                      {item.game_id ? ` • ${item.game_id}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-[#5a3d24]">{item.score} pts</span>
+                  <span className="rounded-full border border-[#c9ab86] bg-[#ecdbc6] px-2 py-1 text-xs text-[#634629]">
+                    {item.hubcoins} hubcoins
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredGames.map((game, index) => (
             <button
@@ -560,6 +691,12 @@ function App() {
 
               <button className="rounded-xl bg-[#6d4c2e] px-5 py-3 text-sm font-semibold text-[#fff4e7] transition hover:bg-[#5f4127]">
                 {selectedGame.installed ? 'Open Game' : 'Install Game'}
+              </button>
+              <button
+                onClick={() => setLeaderboardScope('game')}
+                className="rounded-xl border border-[#b89c78] bg-[#ecd8bf] px-5 py-3 text-sm font-semibold text-[#5f4127] transition hover:bg-[#e6ceb0]"
+              >
+                View Game Leaderboard
               </button>
             </div>
           </div>

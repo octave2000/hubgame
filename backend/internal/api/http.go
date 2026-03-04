@@ -39,6 +39,9 @@ func (s *Server) Router() http.Handler {
 	mux.Handle("/v1/entities", s.auth.RequireAuth(http.HandlerFunc(s.entitiesHandler)))
 	mux.Handle("/v1/entities/", s.auth.RequireAuth(http.HandlerFunc(s.entityByIDHandler)))
 	mux.Handle("/v1/events", s.auth.RequireAuth(http.HandlerFunc(s.eventsHandler)))
+	mux.Handle("/v1/leaderboard", s.auth.RequireAuth(http.HandlerFunc(s.leaderboardHandler)))
+	mux.Handle("/v1/leaderboard/users", s.auth.RequireAuth(http.HandlerFunc(s.leaderboardUsersHandler)))
+	mux.Handle("/v1/leaderboard/scores", s.auth.RequireAuth(http.HandlerFunc(s.leaderboardScoresHandler)))
 
 	return withCORS(logging(mux))
 }
@@ -214,6 +217,84 @@ func (s *Server) eventsHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) leaderboardUsersHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := controller.ClaimsFromContext(r.Context())
+	if err := s.authorizer.Enforce(claims, controller.ActionLeaderboardWrite); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req leaderboardUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	user, err := upsertLeaderboardUser(withClaimsForStorage(r.Context(), claims), s.store, claims.TenantID, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, user)
+}
+
+func (s *Server) leaderboardScoresHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := controller.ClaimsFromContext(r.Context())
+	if err := s.authorizer.Enforce(claims, controller.ActionLeaderboardWrite); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req leaderboardScoreRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	score, err := submitLeaderboardScore(withClaimsForStorage(r.Context(), claims), s.store, claims.TenantID, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusCreated, score)
+}
+
+func (s *Server) leaderboardHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := controller.ClaimsFromContext(r.Context())
+	if err := s.authorizer.Enforce(claims, controller.ActionLeaderboardRead); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
+	if scope == "" {
+		scope = "global"
+	}
+	gameID := strings.TrimSpace(r.URL.Query().Get("game_id"))
+	if scope == "game" && gameID == "" {
+		http.Error(w, "game_id is required when scope=game", http.StatusBadRequest)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	rows, err := queryLeaderboard(withClaimsForStorage(r.Context(), claims), s.store, claims.TenantID, scope, gameID, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"scope":   scope,
+		"game_id": gameID,
+		"items":   rows,
+	})
 }
 
 func logging(next http.Handler) http.Handler {

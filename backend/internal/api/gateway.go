@@ -44,6 +44,9 @@ func (g *GatewayServer) Router() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "gateway"})
 	})
 	mux.HandleFunc("/v1/auth/dev-token", g.devTokenHandler)
+	mux.Handle("/v1/leaderboard", g.requireAuth(http.HandlerFunc(g.leaderboardHandler)))
+	mux.Handle("/v1/leaderboard/users", g.requireAuth(http.HandlerFunc(g.leaderboardUsersHandler)))
+	mux.Handle("/v1/leaderboard/scores", g.requireAuth(http.HandlerFunc(g.leaderboardScoresHandler)))
 	mux.Handle("/v1/events/stream", g.requireAuth(g.requireAction(controller.ActionStreamRead, http.HandlerFunc(g.streamProxy))))
 	mux.Handle("/v1/entities", g.requireAuth(http.HandlerFunc(g.entitiesProxy)))
 	mux.Handle("/v1/entities/", g.requireAuth(http.HandlerFunc(g.entityByIDProxy)))
@@ -172,6 +175,40 @@ func (g *GatewayServer) eventsProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if r.Method == http.MethodPost {
 		if err := g.authorizer.Enforce(claims, controller.ActionEventWrite); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+	}
+	g.proxyHTTP(w, r, claims.TenantID)
+}
+
+func (g *GatewayServer) leaderboardHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := gatewayClaimsFromContext(r.Context())
+	if err := g.authorizer.Enforce(claims, controller.ActionLeaderboardRead); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	g.proxyHTTP(w, r, claims.TenantID)
+}
+
+func (g *GatewayServer) leaderboardUsersHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := gatewayClaimsFromContext(r.Context())
+	if err := g.authorizer.Enforce(claims, controller.ActionLeaderboardWrite); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	g.proxyHTTP(w, r, claims.TenantID)
+}
+
+func (g *GatewayServer) leaderboardScoresHandler(w http.ResponseWriter, r *http.Request) {
+	claims, _ := gatewayClaimsFromContext(r.Context())
+	if r.Method == http.MethodGet {
+		if err := g.authorizer.Enforce(claims, controller.ActionLeaderboardRead); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+	} else {
+		if err := g.authorizer.Enforce(claims, controller.ActionLeaderboardWrite); err != nil {
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}

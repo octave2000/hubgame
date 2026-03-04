@@ -218,8 +218,8 @@ WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL
 }
 
 func (s *Store) ListEntities(ctx context.Context, tenantID, kind string, limit int) ([]Entity, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+	if limit <= 0 || limit > 5000 {
+		limit = 200
 	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, tenant_id, kind, data, version, created_at, updated_at, deleted_at

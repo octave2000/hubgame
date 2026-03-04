@@ -8,3 +8,4 @@
 - Added schema-validation controller hook for entity and event payloads.
 - Auto-emitted entity lifecycle events: inserted, updated, deleted.
 - Added `seed_history` tracking table with `IsSeedApplied` / `MarkSeedApplied` helpers for versioned seed runs.
+- Added leaderboard storage models on top of entities (`leaderboard_user`, `leaderboard_score`) and aggregation queries for global/per-game ranking.

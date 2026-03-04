@@ -15,3 +15,4 @@
 - Added versioned backend catalog seeding command with seed-history tracking and compose one-off runner.
 - Added `/games` static fallback integration: publish + sync scripts feeding `web/public/fallback-catalog.json` when gateway is unavailable.
 - Added `web-store` service to Docker Compose for running frontend in the containerized stack.
+- Added backend leaderboard APIs (global and per-game), developer score/hubcoin hooks, and web leaderboard UI integration.

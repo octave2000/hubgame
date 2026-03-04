@@ -75,8 +75,47 @@ Gateway (`:8080`):
 - `GET|PATCH|DELETE /v1/entities/{id}`
 - `GET|POST /v1/events`
 - `GET /v1/events/stream?topic=entity.game`
+- `GET /v1/leaderboard?scope=global|game&game_id=<id>&limit=<n>`
+- `POST /v1/leaderboard/users`
+- `POST /v1/leaderboard/scores`
 
 Controller (`:8082`):
 - `GET /healthz`
 - `POST /v1/auth/token`
 - `POST /v1/auth/verify`
+
+## Leaderboards and Hubcoins
+Developers can integrate leaderboard workflows through gateway:
+
+Create/update a user profile:
+```bash
+curl -X POST http://localhost:8080/v1/leaderboard/users \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"u1","display_name":"Ada","rank_title":"Gold","hubcoins":120}'
+```
+
+Submit score and hubcoin rewards for a game:
+```bash
+curl -X POST http://localhost:8080/v1/leaderboard/scores \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"game_id":"tik-toe","user_id":"u1","score_delta":25,"hubcoins_delta":8}'
+```
+
+Read global leaderboard:
+```bash
+curl "http://localhost:8080/v1/leaderboard?scope=global&limit=20" \
+  -H "Authorization: Bearer <TOKEN>"
+```
+
+Read per-game leaderboard:
+```bash
+curl "http://localhost:8080/v1/leaderboard?scope=game&game_id=tik-toe&limit=20" \
+  -H "Authorization: Bearer <TOKEN>"
+```
+
+Policy note:
+- `hubcoins` are virtual in-platform credits.
+- `hubcoins` are not purchasable with real-world money.
+- `hubcoins` cannot be converted, exchanged, or redeemed for real-world money.

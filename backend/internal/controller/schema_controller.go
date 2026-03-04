@@ -32,23 +32,27 @@ func (SchemaController) BeforeAppendEvent(_ context.Context, event *database.Eve
 
 func validateEntitySchema(kind string, data json.RawMessage) error {
 	requiredByKind := map[string][]string{
-		"user":  {"username"},
-		"room":  {"name"},
-		"match": {"mode", "status"},
+		"user":              {"username"},
+		"room":              {"name"},
+		"match":             {"mode", "status"},
+		"game":              {"name", "studio", "category", "modes", "vibe", "cover"},
+		"leaderboard_user":  {"user_id", "display_name"},
+		"leaderboard_score": {"game_id", "user_id", "score", "hubcoins"},
 	}
 	return validateRequiredFields("entity", kind, data, requiredByKind)
 }
 
 func validateEventSchema(eventType string, payload json.RawMessage) error {
 	requiredByType := map[string][]string{
-		"entity.inserted": {"id"},
-		"entity.updated":  {"id"},
-		"entity.deleted":  {"id"},
-		"match.create":    {"match_id", "mode"},
-		"match.join":      {"match_id", "user_id"},
-		"move.place":      {"match_id", "x", "y"},
-		"chat.send":       {"room_id", "message"},
-		"reaction.send":   {"room_id", "emoji"},
+		"entity.inserted":             {"id"},
+		"entity.updated":              {"id"},
+		"entity.deleted":              {"id"},
+		"match.create":                {"match_id", "mode"},
+		"match.join":                  {"match_id", "user_id"},
+		"move.place":                  {"match_id", "x", "y"},
+		"chat.send":                   {"room_id", "message"},
+		"reaction.send":               {"room_id", "emoji"},
+		"leaderboard.score_submitted": {"game_id", "user_id", "score", "hubcoins"},
 	}
 	return validateRequiredFields("event", eventType, payload, requiredByType)
 }

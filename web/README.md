@@ -52,6 +52,7 @@ VITE_DEV_ROLE=developer
 - UI requests a dev token from gateway endpoint `POST /v1/auth/dev-token`.
 - Catalog is loaded from backend entities with `kind=game`.
 - Realtime updates use websocket stream on `topic=entity.game`.
+- Leaderboards are loaded from backend (`/v1/leaderboard`) with global and per-game views.
 - If gateway is unavailable, UI falls back to `web/public/fallback-catalog.json`.
 
 ## Build
