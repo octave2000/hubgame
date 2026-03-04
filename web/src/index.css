@@ -6,17 +6,77 @@
   --font-display: 'DM Serif Display', 'Times New Roman', serif;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  background: radial-gradient(circle at top right, #f4e8db 0%, #f5f2ed 40%, #f3f1ed 100%);
   font-family: var(--font-sans);
+  background: #dfc4a3;
 }
 
 .font-display {
   font-family: var(--font-display);
 }
 
-.font-sans {
-  font-family: var(--font-sans);
+.store-shell {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 600px at -10% -5%, #f4e4cf 0%, transparent 60%),
+    radial-gradient(800px 500px at 110% 10%, #e4c59f 0%, transparent 55%),
+    linear-gradient(180deg, #e7d0b4 0%, #dcc1a0 100%);
+}
+
+.store-glow {
+  pointer-events: none;
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(18px);
+  opacity: 0.4;
+  animation: drift 16s ease-in-out infinite;
+}
+
+.store-glow-a {
+  width: 320px;
+  height: 320px;
+  background: #f2d7b5;
+  left: -100px;
+  top: 90px;
+}
+
+.store-glow-b {
+  width: 260px;
+  height: 260px;
+  background: #caa57d;
+  right: -70px;
+  top: 300px;
+  animation-delay: 1.4s;
+}
+
+.reveal-up {
+  animation: reveal-up 0.58s ease-out both;
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
 }
