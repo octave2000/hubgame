@@ -30,6 +30,15 @@ bun run dev
 
 The app connects to gateway `http://localhost:8080` by default.
 
+## Docker Compose Web Store
+Run full stack including web store:
+```bash
+docker compose up --build
+```
+
+Web store URL:
+- `http://localhost:3000`
+
 ## Optional Env
 Create `web/.env`:
 ```bash

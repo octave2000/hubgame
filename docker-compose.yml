@@ -47,6 +47,15 @@ services:
     ports:
       - "8080:8080"
 
+  web-store:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    depends_on:
+      - gateway
+    ports:
+      - "3000:80"
+
   seed-catalog:
     profiles: ["tools"]
     build:
