@@ -50,6 +50,15 @@ services:
     ports:
       - "8080:8080"
 
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    depends_on:
+      - gateway
+    ports:
+      - "3000:80"
+
   web-store:
     build:
       context: .
